@@ -3,7 +3,11 @@ import Node from './Node.jsx'
 import './PathfindingVisualizer.css'
 import { dijkstra, getNodesInShortestPathOrder } from '../algorithms/dijkstra.js'
 import { bfs } from '../algorithms/bfs.js'
-import { generateRecursiveDivisionMaze } from '../algorithms/maze.js'
+import { astar } from '../algorithms/astar.js'
+import {
+  generateRecursiveBacktrackerMaze,
+  generateRecursiveDivisionMaze,
+} from '../algorithms/maze.js'
 
 const DEFAULT_ROWS = 20
 const DEFAULT_COLS = 50
@@ -73,6 +77,7 @@ function cloneGridForAlgorithm(grid) {
     row.map((node) => ({
       ...node,
       distance: Infinity,
+      fScore: Infinity,
       isVisited: false,
       previousNode: null,
     })),
@@ -105,7 +110,8 @@ export default function PathfindingVisualizer() {
   const [isAnimating, setIsAnimating] = useState(false)
   const [status, setStatus] = useState('Ready')
   const [hasVisualization, setHasVisualization] = useState(false)
-  const [algorithm, setAlgorithm] = useState('dijkstra') // 'dijkstra' | 'bfs'
+  const [algorithm, setAlgorithm] = useState('astar') // 'astar' | 'dijkstra' | 'bfs'
+  const [mazeType, setMazeType] = useState('backtracker') // 'backtracker' | 'division'
   const [visitDelayMs, setVisitDelayMs] = useState(10)
 
   const wallPaintValueRef = useRef(true)
@@ -270,13 +276,22 @@ export default function PathfindingVisualizer() {
     clearVisualizationOnly()
     setStatus('Generating maze...')
 
-    const walls = generateRecursiveDivisionMaze({
-      rows: numRows,
-      cols: numCols,
-      start: startPos,
-      finish: finishPos,
-      addBorder: true,
-    })
+    const walls =
+      mazeType === 'division'
+        ? generateRecursiveDivisionMaze({
+            rows: numRows,
+            cols: numCols,
+            start: startPos,
+            finish: finishPos,
+            addBorder: true,
+          })
+        : generateRecursiveBacktrackerMaze({
+            rows: numRows,
+            cols: numCols,
+            start: startPos,
+            finish: finishPos,
+            addBorder: true,
+          })
 
     setGrid((prevGrid) =>
       prevGrid.map((row) =>
@@ -371,7 +386,13 @@ export default function PathfindingVisualizer() {
 
     clearVisualizationOnly()
     setIsAnimating(true)
-    setStatus(algorithm === 'bfs' ? 'Visualizing BFS...' : 'Visualizing Dijkstra...')
+    setStatus(
+      algorithm === 'bfs'
+        ? 'Visualizing BFS...'
+        : algorithm === 'dijkstra'
+          ? 'Visualizing Dijkstra...'
+          : 'Visualizing A*...',
+    )
     setHasVisualization(true)
 
     const gridForAlgo = cloneGridForAlgorithm(grid)
@@ -381,7 +402,9 @@ export default function PathfindingVisualizer() {
     const visitedNodesInOrder =
       algorithm === 'bfs'
         ? bfs(gridForAlgo, startNode, finishNode)
-        : dijkstra(gridForAlgo, startNode, finishNode)
+        : algorithm === 'dijkstra'
+          ? dijkstra(gridForAlgo, startNode, finishNode)
+          : astar(gridForAlgo, startNode, finishNode)
     const nodesInShortestPathOrder = getNodesInShortestPathOrder(finishNode)
 
     const hasPath =
@@ -405,7 +428,7 @@ export default function PathfindingVisualizer() {
   }
 
   const algorithmLabel = useMemo(
-    () => (algorithm === 'bfs' ? 'BFS' : 'Dijkstra'),
+    () => (algorithm === 'bfs' ? 'BFS' : algorithm === 'dijkstra' ? 'Dijkstra' : 'A*'),
     [algorithm],
   )
 
@@ -427,8 +450,21 @@ export default function PathfindingVisualizer() {
               onChange={(e) => setAlgorithm(e.target.value)}
               disabled={isAnimating}
             >
+              <option value="astar">A*</option>
               <option value="dijkstra">Dijkstra</option>
               <option value="bfs">BFS (unweighted)</option>
+            </select>
+          </label>
+
+          <label className="pv-field">
+            <span className="pv-fieldLabel">Maze</span>
+            <select
+              value={mazeType}
+              onChange={(e) => setMazeType(e.target.value)}
+              disabled={isAnimating}
+            >
+              <option value="backtracker">DFS Backtracker</option>
+              <option value="division">Recursive Division</option>
             </select>
           </label>
 
