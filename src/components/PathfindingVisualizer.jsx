@@ -5,11 +5,38 @@ import { dijkstra, getNodesInShortestPathOrder } from '../algorithms/dijkstra.js
 import { bfs } from '../algorithms/bfs.js'
 import { generateRecursiveDivisionMaze } from '../algorithms/maze.js'
 
-const NUM_ROWS = 20
-const NUM_COLS = 50
+const DEFAULT_ROWS = 20
+const DEFAULT_COLS = 50
+const CELL_SIZE_PX = 22
 
-const DEFAULT_START = { row: 10, col: 5 }
-const DEFAULT_FINISH = { row: 10, col: 45 }
+const MIN_ROWS = 5
+const MAX_ROWS = 60
+const MIN_COLS = 10
+const MAX_COLS = 120
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n))
+}
+
+function getDefaultEndpoints(rows, cols) {
+  const row = clamp(Math.floor(rows / 2), 0, rows - 1)
+  const startCol = clamp(5, 0, cols - 1)
+  const finishCol = clamp(cols - 6, 0, cols - 1)
+
+  // If the grid is tiny, ensure start and finish don't overlap.
+  const start = { row, col: startCol }
+  const finish =
+    finishCol === startCol ? { row, col: clamp(cols - 1, 0, cols - 1) } : { row, col: finishCol }
+
+  return { start, finish }
+}
+
+function clampPos(pos, rows, cols) {
+  return {
+    row: clamp(pos.row, 0, rows - 1),
+    col: clamp(pos.col, 0, cols - 1),
+  }
+}
 
 function wallKey(row, col) {
   return `${row}-${col}`
@@ -28,11 +55,11 @@ function createNode(col, row, start, finish) {
   }
 }
 
-function buildInitialGrid(start, finish) {
+function buildInitialGrid(rows, cols, start, finish) {
   const grid = []
-  for (let row = 0; row < NUM_ROWS; row++) {
+  for (let row = 0; row < rows; row++) {
     const currentRow = []
-    for (let col = 0; col < NUM_COLS; col++) {
+    for (let col = 0; col < cols; col++) {
       currentRow.push(createNode(col, row, start, finish))
     }
     grid.push(currentRow)
@@ -60,9 +87,19 @@ function baseNodeClass(isStart, isFinish, isWall) {
 }
 
 export default function PathfindingVisualizer() {
-  const [startPos, setStartPos] = useState(DEFAULT_START)
-  const [finishPos, setFinishPos] = useState(DEFAULT_FINISH)
-  const [grid, setGrid] = useState(() => buildInitialGrid(DEFAULT_START, DEFAULT_FINISH))
+  const [numRows, setNumRows] = useState(DEFAULT_ROWS)
+  const [numCols, setNumCols] = useState(DEFAULT_COLS)
+
+  const initialEndpoints = useMemo(() => getDefaultEndpoints(DEFAULT_ROWS, DEFAULT_COLS), [])
+  const [startPos, setStartPos] = useState(initialEndpoints.start)
+  const [finishPos, setFinishPos] = useState(initialEndpoints.finish)
+  const [grid, setGrid] = useState(() =>
+    buildInitialGrid(DEFAULT_ROWS, DEFAULT_COLS, initialEndpoints.start, initialEndpoints.finish),
+  )
+
+  const [rowsInput, setRowsInput] = useState(String(DEFAULT_ROWS))
+  const [colsInput, setColsInput] = useState(String(DEFAULT_COLS))
+
   const [mouseIsPressed, setMouseIsPressed] = useState(false)
   const [dragMode, setDragMode] = useState(null) // 'wall' | 'start' | 'finish' | null
   const [isAnimating, setIsAnimating] = useState(false)
@@ -234,8 +271,8 @@ export default function PathfindingVisualizer() {
     setStatus('Generating maze...')
 
     const walls = generateRecursiveDivisionMaze({
-      rows: NUM_ROWS,
-      cols: NUM_COLS,
+      rows: numRows,
+      cols: numCols,
       start: startPos,
       finish: finishPos,
       addBorder: true,
@@ -253,11 +290,41 @@ export default function PathfindingVisualizer() {
     setStatus('Ready')
   }
 
+  function applyGridSize() {
+    if (isAnimating) return
+    clearVisualizationOnly()
+
+    const requestedRows = Number.parseInt(rowsInput, 10)
+    const requestedCols = Number.parseInt(colsInput, 10)
+
+    const nextRows = clamp(Number.isFinite(requestedRows) ? requestedRows : DEFAULT_ROWS, MIN_ROWS, MAX_ROWS)
+    const nextCols = clamp(Number.isFinite(requestedCols) ? requestedCols : DEFAULT_COLS, MIN_COLS, MAX_COLS)
+
+    // Preserve endpoints if possible, otherwise clamp into bounds.
+    let nextStart = clampPos(startPos, nextRows, nextCols)
+    let nextFinish = clampPos(finishPos, nextRows, nextCols)
+
+    // Prevent overlap if clamping caused collision.
+    if (nextStart.row === nextFinish.row && nextStart.col === nextFinish.col) {
+      const defaults = getDefaultEndpoints(nextRows, nextCols)
+      nextStart = defaults.start
+      nextFinish = defaults.finish
+    }
+
+    setNumRows(nextRows)
+    setNumCols(nextCols)
+    setStartPos(nextStart)
+    setFinishPos(nextFinish)
+    setGrid(buildInitialGrid(nextRows, nextCols, nextStart, nextFinish))
+    setStatus('Ready')
+  }
+
   function resetBoard() {
     clearVisualizationOnly()
-    setStartPos(DEFAULT_START)
-    setFinishPos(DEFAULT_FINISH)
-    setGrid(buildInitialGrid(DEFAULT_START, DEFAULT_FINISH))
+    const defaults = getDefaultEndpoints(numRows, numCols)
+    setStartPos(defaults.start)
+    setFinishPos(defaults.finish)
+    setGrid(buildInitialGrid(numRows, numCols, defaults.start, defaults.finish))
   }
 
   function animateShortestPath(nodesInShortestPathOrder, baseDelayMs) {
@@ -379,8 +446,36 @@ export default function PathfindingVisualizer() {
             <span className="pv-fieldValue">{visitDelayMs}ms</span>
           </label>
 
-          <button onClick={visualize} disabled={isAnimating}>
-            Visualize {algorithmLabel}
+          <label className="pv-field pv-field--wide">
+            <span className="pv-fieldLabel">Grid</span>
+            <input
+              className="pv-input"
+              type="number"
+              min={MIN_ROWS}
+              max={MAX_ROWS}
+              value={rowsInput}
+              onChange={(e) => setRowsInput(e.target.value)}
+              disabled={isAnimating}
+              aria-label="Grid rows"
+            />
+            <span className="pv-fieldLabel">x</span>
+            <input
+              className="pv-input"
+              type="number"
+              min={MIN_COLS}
+              max={MAX_COLS}
+              value={colsInput}
+              onChange={(e) => setColsInput(e.target.value)}
+              disabled={isAnimating}
+              aria-label="Grid columns"
+            />
+            <button onClick={applyGridSize} disabled={isAnimating}>
+              Apply
+            </button>
+          </label>
+
+          <button onClick={isAnimating ? stopAnimation : visualize}>
+            {isAnimating ? 'Stop' : `Visualize ${algorithmLabel}`}
           </button>
           <button onClick={generateMaze} disabled={isAnimating}>
             Generate Maze
@@ -388,8 +483,8 @@ export default function PathfindingVisualizer() {
           <button onClick={clearWalls} disabled={isAnimating}>
             Clear Walls
           </button>
-          <button onClick={isAnimating ? stopAnimation : clearVisualizationOnly}>
-            {isAnimating ? 'Stop' : 'Clear Path'}
+          <button onClick={clearVisualizationOnly} disabled={isAnimating}>
+            Clear Path
           </button>
           <button onClick={resetBoard} disabled={isAnimating}>
             Reset Board
@@ -426,7 +521,7 @@ export default function PathfindingVisualizer() {
       >
         <div
           className="pv-grid"
-          style={{ gridTemplateColumns: `repeat(${NUM_COLS}, 22px)` }}
+          style={{ gridTemplateColumns: `repeat(${numCols}, ${CELL_SIZE_PX}px)` }}
         >
           {grid.map((row) =>
             row.map((node) => (
