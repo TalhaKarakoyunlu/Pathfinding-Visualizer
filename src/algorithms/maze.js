@@ -285,4 +285,108 @@ export function generateRecursiveBacktrackerMaze({ rows, cols, start, finish, ad
   return walls
 }
 
+/**
+ * Randomized Prim's Maze generator (odd-cell carving).
+ *
+ * Similar representation to DFS Backtracker:
+ * - Maze "cells" are odd coordinates.
+ * - Walls live between cells and on even coordinates.
+ *
+ * Output:
+ * - Set of "row-col" keys to mark as walls.
+ */
+export function generateRandomizedPrimsMaze({ rows, cols, start, finish, addBorder = true }) {
+  const walls = new Set()
+  const protectedNodes = new Set([key(start.row, start.col), key(finish.row, finish.col)])
+
+  function inBounds(r, c) {
+    return r >= 0 && r < rows && c >= 0 && c < cols
+  }
+
+  function isInterior(r, c) {
+    return r > 0 && r < rows - 1 && c > 0 && c < cols - 1
+  }
+
+  function setWall(r, c) {
+    const k = key(r, c)
+    if (protectedNodes.has(k)) return
+    walls.add(k)
+  }
+
+  function clearWall(r, c) {
+    walls.delete(key(r, c))
+  }
+
+  // Start with everything walled (including border).
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (addBorder && (r === 0 || c === 0 || r === rows - 1 || c === cols - 1)) {
+        setWall(r, c)
+      } else {
+        setWall(r, c)
+      }
+    }
+  }
+
+  // Pick a random odd interior cell to start.
+  const startRow = randomOdd(1, rows - 2) ?? 1
+  const startCol = randomOdd(1, cols - 2) ?? 1
+
+  clearWall(startRow, startCol)
+
+  const inMaze = new Set([`${startRow}-${startCol}`])
+  const frontier = []
+
+  const directions = [
+    { dr: -2, dc: 0 },
+    { dr: 2, dc: 0 },
+    { dr: 0, dc: -2 },
+    { dr: 0, dc: 2 },
+  ]
+
+  function addFrontier(r, c) {
+    for (const { dr, dc } of directions) {
+      const nr = r + dr
+      const nc = c + dc
+      if (!inBounds(nr, nc) || !isInterior(nr, nc)) continue
+      if (nr % 2 === 0 || nc % 2 === 0) continue
+      const k = `${nr}-${nc}`
+      if (inMaze.has(k)) continue
+      // Track frontier cell + its parent cell to carve a connection.
+      frontier.push({ r: nr, c: nc, pr: r, pc: c })
+    }
+  }
+
+  addFrontier(startRow, startCol)
+
+  while (frontier.length) {
+    const idx = Math.floor(Math.random() * frontier.length)
+    const item = frontier.splice(idx, 1)[0]
+    if (!item) break
+
+    const k = `${item.r}-${item.c}`
+    if (inMaze.has(k)) continue
+
+    // Carve connection between parent and this frontier cell.
+    const wallR = Math.floor((item.r + item.pr) / 2)
+    const wallC = Math.floor((item.c + item.pc) / 2)
+
+    clearWall(wallR, wallC)
+    clearWall(item.r, item.c)
+    inMaze.add(k)
+
+    addFrontier(item.r, item.c)
+  }
+
+  // Ensure endpoints are open, plus basic connectivity.
+  clearWall(start.row, start.col)
+  clearWall(finish.row, finish.col)
+
+  // Ensure endpoints aren't isolated when placed on borders/corners.
+  ensureEndpointOpenings(walls, rows, cols, start)
+  ensureEndpointOpenings(walls, rows, cols, finish)
+
+  return walls
+}
+
 

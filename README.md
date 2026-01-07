@@ -12,13 +12,17 @@ An interactive grid-based pathfinding visualizer built with React. Use it to com
   - **A\*** (Manhattan heuristic, 4-directional movement)
   - **Dijkstra** (unweighted grid = cost 1 per step)
   - **BFS** (unweighted shortest path)
+  - **Greedy Best-First** (heuristic-driven; not guaranteed shortest)
+  - **DFS** (depth-first; not guaranteed shortest)
 - **Visualization**
   - Step-by-step visited nodes animation
   - Shortest path highlight
   - Speed control + Stop
+  - Runtime benchmarking + recent history (compute time)
 - **Maze generation**
   - **DFS Recursive Backtracker** (classic perfect-maze style)
   - **Recursive Division**
+  - **Randomized Prim's**
 
 ## Run locally
 
@@ -39,11 +43,13 @@ Then open the printed local URL (usually `http://127.0.0.1:5173/`).
 ## Controls (quick guide)
 
 - **Algorithm**: choose A\* / Dijkstra / BFS
-- **Maze**: choose DFS Backtracker / Recursive Division, then click **Generate Maze**
+- **Maze**: choose DFS Backtracker / Recursive Division / Randomized Prim's, then click **Generate Maze**
 - **Speed**: controls animation delay per visited node
 - **Grid**: set rows/cols and click **Apply**
+- **Benchmark All**: runs all algorithms on the current grid and records compute times (no animation)
 - **Clear Walls**: removes all walls
 - **Clear Path**: removes visited/path visualization (keeps walls)
+- **Clear History**: clears recent benchmark results
 - **Reset Board**: resets endpoints and clears walls/path for the current grid size
 
 ## Option descriptions (short)
@@ -53,11 +59,14 @@ Then open the printed local URL (usually `http://127.0.0.1:5173/`).
 - **A\***: uses a heuristic (Manhattan distance) to prioritize nodes that *look closer to the finish*, so it often “moves toward” the endpoint instead of exploring uniformly.
 - **Dijkstra**: explores outward by total path cost (on our unweighted grid, each step costs 1), guaranteeing the shortest path.
 - **BFS**: explores level-by-level (unweighted), also guaranteeing the shortest path, typically with simpler logic than Dijkstra.
+- **Greedy Best-First**: prioritizes heuristic closeness to the finish and ignores path cost, so it can be fast but not optimal.
+- **DFS**: dives deep along a branch before backtracking; useful for contrast but not optimal.
 
 ### Mazes
 
 - **DFS Backtracker**: creates a “perfect maze” (many long corridors) by carving passages via depth-first search.
 - **Recursive Division**: repeatedly splits regions with walls and leaves single openings, producing structured, room-like patterns.
+- **Randomized Prim's**: grows a maze by expanding from a frontier; tends to create many short branches and junctions.
 
 ## Project structure
 
@@ -66,5 +75,7 @@ Then open the printed local URL (usually `http://127.0.0.1:5173/`).
 - `src/algorithms/dijkstra.js`: pure algorithm implementation + backtracking helper
 - `src/algorithms/astar.js`: A\* implementation (Manhattan heuristic)
 - `src/algorithms/bfs.js`: BFS implementation
+- `src/algorithms/greedyBestFirst.js`: Greedy Best-First Search implementation
+- `src/algorithms/dfs.js`: DFS implementation
 - `src/algorithms/maze.js`: maze generators (recursive division + DFS backtracker)
 - `src/components/*.css`: visual styles for grid and animations

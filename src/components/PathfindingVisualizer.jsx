@@ -4,9 +4,12 @@ import './PathfindingVisualizer.css'
 import { dijkstra, getNodesInShortestPathOrder } from '../algorithms/dijkstra.js'
 import { bfs } from '../algorithms/bfs.js'
 import { astar } from '../algorithms/astar.js'
+import { greedyBestFirst } from '../algorithms/greedyBestFirst.js'
+import { dfs } from '../algorithms/dfs.js'
 import {
   generateRecursiveBacktrackerMaze,
   generateRecursiveDivisionMaze,
+  generateRandomizedPrimsMaze,
 } from '../algorithms/maze.js'
 
 const DEFAULT_ROWS = 20
@@ -18,8 +21,18 @@ const MAX_ROWS = 60
 const MIN_COLS = 10
 const MAX_COLS = 120
 
+const HISTORY_STORAGE_KEY = 'pfv_history_v1'
+const MAX_HISTORY_ENTRIES = 12
+
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n))
+}
+
+function formatMs(ms) {
+  if (!Number.isFinite(ms)) return '-'
+  if (ms < 10) return `${ms.toFixed(2)}ms`
+  if (ms < 100) return `${ms.toFixed(1)}ms`
+  return `${Math.round(ms)}ms`
 }
 
 function getDefaultEndpoints(rows, cols) {
@@ -108,14 +121,19 @@ export default function PathfindingVisualizer() {
   const [mouseIsPressed, setMouseIsPressed] = useState(false)
   const [dragMode, setDragMode] = useState(null) // 'wall' | 'start' | 'finish' | null
   const [isAnimating, setIsAnimating] = useState(false)
+  const [isBenchmarking, setIsBenchmarking] = useState(false)
   const [status, setStatus] = useState('Ready')
   const [hasVisualization, setHasVisualization] = useState(false)
-  const [algorithm, setAlgorithm] = useState('astar') // 'astar' | 'dijkstra' | 'bfs'
-  const [mazeType, setMazeType] = useState('backtracker') // 'backtracker' | 'division'
+  const [algorithm, setAlgorithm] = useState('astar') // 'astar' | 'dijkstra' | 'bfs' | 'greedy' | 'dfs'
+  const [mazeType, setMazeType] = useState('backtracker') // 'backtracker' | 'division' | 'prims'
   const [visitDelayMs, setVisitDelayMs] = useState(10)
+  const [lastRun, setLastRun] = useState(null)
+  const [runHistory, setRunHistory] = useState([])
 
   const wallPaintValueRef = useRef(true)
   const timeoutsRef = useRef([])
+
+  const controlsDisabled = isAnimating || isBenchmarking
 
   function scheduleTimeout(fn, delayMs) {
     const id = setTimeout(fn, delayMs)
@@ -130,6 +148,27 @@ export default function PathfindingVisualizer() {
   useEffect(() => {
     return () => clearAllTimeouts()
   }, [])
+
+  useEffect(() => {
+    // Load persisted history (best-effort).
+    try {
+      const raw = localStorage.getItem(HISTORY_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) setRunHistory(parsed.slice(0, MAX_HISTORY_ENTRIES))
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    // Persist history (best-effort).
+    try {
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(runHistory.slice(0, MAX_HISTORY_ENTRIES)))
+    } catch {
+      // ignore
+    }
+  }, [runHistory])
 
   useEffect(() => {
     // If the user releases the mouse outside the grid/window, we still want to end the drag.
@@ -172,6 +211,11 @@ export default function PathfindingVisualizer() {
     // We likely have partially-drawn visited/path classes on the DOM now.
     // Mark as "visualized" so Clear Path will definitely reset the grid.
     setHasVisualization(true)
+  }
+
+  function clearHistory() {
+    setRunHistory([])
+    setLastRun(null)
   }
 
   function setGridNodeWall(row, col, isWall) {
@@ -220,7 +264,7 @@ export default function PathfindingVisualizer() {
   }
 
   function handleMouseDown(row, col) {
-    if (isAnimating) return
+    if (controlsDisabled) return
     if (hasVisualization) clearVisualizationOnly()
     const node = grid[row][col]
     setMouseIsPressed(true)
@@ -241,7 +285,7 @@ export default function PathfindingVisualizer() {
   }
 
   function handleMouseEnter(row, col) {
-    if (!mouseIsPressed || isAnimating) return
+    if (!mouseIsPressed || controlsDisabled) return
 
     if (dragMode === 'wall') {
       setGridNodeWall(row, col, wallPaintValueRef.current)
@@ -262,7 +306,7 @@ export default function PathfindingVisualizer() {
   }
 
   function clearWalls() {
-    if (isAnimating) return
+    if (controlsDisabled) return
     clearVisualizationOnly()
     setGrid((prevGrid) =>
       prevGrid.map((row) =>
@@ -272,7 +316,7 @@ export default function PathfindingVisualizer() {
   }
 
   function generateMaze() {
-    if (isAnimating) return
+    if (controlsDisabled) return
     clearVisualizationOnly()
     setStatus('Generating maze...')
 
@@ -285,6 +329,14 @@ export default function PathfindingVisualizer() {
             finish: finishPos,
             addBorder: true,
           })
+        : mazeType === 'prims'
+          ? generateRandomizedPrimsMaze({
+              rows: numRows,
+              cols: numCols,
+              start: startPos,
+              finish: finishPos,
+              addBorder: true,
+            })
         : generateRecursiveBacktrackerMaze({
             rows: numRows,
             cols: numCols,
@@ -306,7 +358,7 @@ export default function PathfindingVisualizer() {
   }
 
   function applyGridSize() {
-    if (isAnimating) return
+    if (controlsDisabled) return
     clearVisualizationOnly()
 
     const requestedRows = Number.parseInt(rowsInput, 10)
@@ -340,6 +392,63 @@ export default function PathfindingVisualizer() {
     setStartPos(defaults.start)
     setFinishPos(defaults.finish)
     setGrid(buildInitialGrid(numRows, numCols, defaults.start, defaults.finish))
+  }
+
+  function computeRun(algorithmKey) {
+    const gridForAlgo = cloneGridForAlgorithm(grid)
+    const startNode = gridForAlgo[startPos.row][startPos.col]
+    const finishNode = gridForAlgo[finishPos.row][finishPos.col]
+
+    const t0 = performance.now()
+    const visitedNodesInOrder =
+      algorithmKey === 'bfs'
+        ? bfs(gridForAlgo, startNode, finishNode)
+        : algorithmKey === 'dijkstra'
+          ? dijkstra(gridForAlgo, startNode, finishNode)
+          : algorithmKey === 'greedy'
+            ? greedyBestFirst(gridForAlgo, startNode, finishNode)
+            : algorithmKey === 'dfs'
+              ? dfs(gridForAlgo, startNode, finishNode)
+              : astar(gridForAlgo, startNode, finishNode)
+    const t1 = performance.now()
+
+    const nodesInShortestPathOrder = getNodesInShortestPathOrder(finishNode)
+    const hasPath =
+      nodesInShortestPathOrder.length > 0 &&
+      nodesInShortestPathOrder[0].row === startNode.row &&
+      nodesInShortestPathOrder[0].col === startNode.col &&
+      nodesInShortestPathOrder[nodesInShortestPathOrder.length - 1].row === finishNode.row &&
+      nodesInShortestPathOrder[nodesInShortestPathOrder.length - 1].col === finishNode.col
+
+    return {
+      computeMs: t1 - t0,
+      visitedNodesInOrder,
+      nodesInShortestPathOrder: hasPath ? nodesInShortestPathOrder : [],
+      hasPath,
+      visitedCount: visitedNodesInOrder.length,
+      pathLength: hasPath ? nodesInShortestPathOrder.length : 0,
+    }
+  }
+
+  function labelForAlgorithm(key) {
+    if (key === 'astar') return 'A*'
+    if (key === 'dijkstra') return 'Dijkstra'
+    if (key === 'bfs') return 'BFS'
+    if (key === 'greedy') return 'Greedy Best-First'
+    if (key === 'dfs') return 'DFS'
+    return key
+  }
+
+  function labelForMaze(key) {
+    if (key === 'backtracker') return 'DFS Backtracker'
+    if (key === 'division') return 'Recursive Division'
+    if (key === 'prims') return "Prim's"
+    return key
+  }
+
+  function pushHistory(entry) {
+    setLastRun(entry)
+    setRunHistory((prev) => [entry, ...prev].slice(0, MAX_HISTORY_ENTRIES))
   }
 
   function animateShortestPath(nodesInShortestPathOrder, baseDelayMs) {
@@ -386,51 +495,73 @@ export default function PathfindingVisualizer() {
 
     clearVisualizationOnly()
     setIsAnimating(true)
-    setStatus(
-      algorithm === 'bfs'
-        ? 'Visualizing BFS...'
-        : algorithm === 'dijkstra'
-          ? 'Visualizing Dijkstra...'
-          : 'Visualizing A*...',
-    )
+    setStatus(`Visualizing ${labelForAlgorithm(algorithm)}...`)
     setHasVisualization(true)
 
-    const gridForAlgo = cloneGridForAlgorithm(grid)
-    const startNode = gridForAlgo[startPos.row][startPos.col]
-    const finishNode = gridForAlgo[finishPos.row][finishPos.col]
+    const run = computeRun(algorithm)
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      ts: new Date().toISOString(),
+      algorithm,
+      mazeType,
+      rows: numRows,
+      cols: numCols,
+      computeMs: run.computeMs,
+      visitedCount: run.visitedCount,
+      pathLength: run.pathLength,
+      result: run.hasPath ? 'path' : 'blocked',
+    }
+    pushHistory(entry)
 
-    const visitedNodesInOrder =
-      algorithm === 'bfs'
-        ? bfs(gridForAlgo, startNode, finishNode)
-        : algorithm === 'dijkstra'
-          ? dijkstra(gridForAlgo, startNode, finishNode)
-          : astar(gridForAlgo, startNode, finishNode)
-    const nodesInShortestPathOrder = getNodesInShortestPathOrder(finishNode)
-
-    const hasPath =
-      nodesInShortestPathOrder.length > 0 &&
-      nodesInShortestPathOrder[0].row === startNode.row &&
-      nodesInShortestPathOrder[0].col === startNode.col &&
-      nodesInShortestPathOrder[nodesInShortestPathOrder.length - 1].row === finishNode.row &&
-      nodesInShortestPathOrder[nodesInShortestPathOrder.length - 1].col === finishNode.col
-
-    if (!hasPath) {
-      animateVisitedNodes(visitedNodesInOrder, [])
+    if (!run.hasPath) {
+      animateVisitedNodes(run.visitedNodesInOrder, [])
       scheduleTimeout(() => {
         setIsAnimating(false)
-        setStatus('No path found (blocked).')
+        setStatus(`No path found (blocked). Compute: ${formatMs(entry.computeMs)}`)
         setHasVisualization(true)
-      }, visitDelayMs * visitedNodesInOrder.length + 50)
+      }, visitDelayMs * run.visitedNodesInOrder.length + 50)
       return
     }
 
-    animateVisitedNodes(visitedNodesInOrder, nodesInShortestPathOrder)
+    setStatus(`Visualizing ${labelForAlgorithm(algorithm)}... Compute: ${formatMs(entry.computeMs)}`)
+    animateVisitedNodes(run.visitedNodesInOrder, run.nodesInShortestPathOrder)
   }
 
   const algorithmLabel = useMemo(
-    () => (algorithm === 'bfs' ? 'BFS' : algorithm === 'dijkstra' ? 'Dijkstra' : 'A*'),
+    () => labelForAlgorithm(algorithm),
     [algorithm],
   )
+
+  function benchmarkAll() {
+    if (controlsDisabled) return
+    clearVisualizationOnly()
+    setIsBenchmarking(true)
+    setStatus('Benchmarking all algorithms...')
+
+    const algoKeys = ['astar', 'dijkstra', 'bfs', 'greedy', 'dfs']
+    const baseTs = new Date().toISOString()
+    const entries = []
+    for (const key of algoKeys) {
+      const run = computeRun(key)
+      entries.push({
+        id: `${Date.now()}-${key}-${Math.random().toString(16).slice(2)}`,
+        ts: baseTs,
+        algorithm: key,
+        mazeType,
+        rows: numRows,
+        cols: numCols,
+        computeMs: run.computeMs,
+        visitedCount: run.visitedCount,
+        pathLength: run.pathLength,
+        result: run.hasPath ? 'path' : 'blocked',
+      })
+    }
+
+    setRunHistory((prev) => [...entries, ...prev].slice(0, MAX_HISTORY_ENTRIES))
+    setLastRun(entries[0] ?? null)
+    setIsBenchmarking(false)
+    setStatus('Ready')
+  }
 
   return (
     <div className="pv">
@@ -448,11 +579,13 @@ export default function PathfindingVisualizer() {
             <select
               value={algorithm}
               onChange={(e) => setAlgorithm(e.target.value)}
-              disabled={isAnimating}
+              disabled={controlsDisabled}
             >
               <option value="astar">A*</option>
               <option value="dijkstra">Dijkstra</option>
               <option value="bfs">BFS (unweighted)</option>
+              <option value="greedy">Greedy Best-First</option>
+              <option value="dfs">DFS</option>
             </select>
           </label>
 
@@ -461,10 +594,11 @@ export default function PathfindingVisualizer() {
             <select
               value={mazeType}
               onChange={(e) => setMazeType(e.target.value)}
-              disabled={isAnimating}
+              disabled={controlsDisabled}
             >
               <option value="backtracker">DFS Backtracker</option>
               <option value="division">Recursive Division</option>
+              <option value="prims">Randomized Prim's</option>
             </select>
           </label>
 
@@ -477,7 +611,7 @@ export default function PathfindingVisualizer() {
               step="1"
               value={visitDelayMs}
               onChange={(e) => setVisitDelayMs(Number(e.target.value))}
-              disabled={isAnimating}
+              disabled={controlsDisabled}
             />
             <span className="pv-fieldValue">{visitDelayMs}ms</span>
           </label>
@@ -491,7 +625,7 @@ export default function PathfindingVisualizer() {
               max={MAX_ROWS}
               value={rowsInput}
               onChange={(e) => setRowsInput(e.target.value)}
-              disabled={isAnimating}
+              disabled={controlsDisabled}
               aria-label="Grid rows"
             />
             <span className="pv-fieldLabel">x</span>
@@ -502,10 +636,10 @@ export default function PathfindingVisualizer() {
               max={MAX_COLS}
               value={colsInput}
               onChange={(e) => setColsInput(e.target.value)}
-              disabled={isAnimating}
+              disabled={controlsDisabled}
               aria-label="Grid columns"
             />
-            <button onClick={applyGridSize} disabled={isAnimating}>
+            <button onClick={applyGridSize} disabled={controlsDisabled}>
               Apply
             </button>
           </label>
@@ -513,16 +647,22 @@ export default function PathfindingVisualizer() {
           <button onClick={isAnimating ? stopAnimation : visualize}>
             {isAnimating ? 'Stop' : `Visualize ${algorithmLabel}`}
           </button>
-          <button onClick={generateMaze} disabled={isAnimating}>
+          <button onClick={benchmarkAll} disabled={controlsDisabled}>
+            Benchmark All
+          </button>
+          <button onClick={generateMaze} disabled={controlsDisabled}>
             Generate Maze
           </button>
-          <button onClick={clearWalls} disabled={isAnimating}>
+          <button onClick={clearWalls} disabled={controlsDisabled}>
             Clear Walls
           </button>
-          <button onClick={clearVisualizationOnly} disabled={isAnimating}>
+          <button onClick={clearVisualizationOnly} disabled={controlsDisabled}>
             Clear Path
           </button>
-          <button onClick={resetBoard} disabled={isAnimating}>
+          <button onClick={clearHistory} disabled={controlsDisabled}>
+            Clear History
+          </button>
+          <button onClick={resetBoard} disabled={controlsDisabled}>
             Reset Board
           </button>
         </div>
@@ -530,7 +670,58 @@ export default function PathfindingVisualizer() {
 
       <div className="pv-status" aria-live="polite">
         <span className="pv-status-label">Status:</span> {status}
+        {lastRun ? (
+          <div className="pv-runline">
+            Last run: <strong>{labelForAlgorithm(lastRun.algorithm)}</strong> on{' '}
+            <strong>{labelForMaze(lastRun.mazeType)}</strong> — compute{' '}
+            <strong>{formatMs(lastRun.computeMs)}</strong> · visited{' '}
+            <strong>{lastRun.visitedCount}</strong> · path{' '}
+            <strong>{lastRun.pathLength}</strong> · result{' '}
+            <strong>{lastRun.result}</strong>
+          </div>
+        ) : null}
       </div>
+
+      <section className="pv-history">
+        <div className="pv-historyHeader">
+          <div className="pv-historyTitle">Recent benchmarks</div>
+          <div className="pv-historyHint">Compute time only (animation excluded).</div>
+        </div>
+        {runHistory.length ? (
+          <div className="pv-tableWrap">
+            <table className="pv-table">
+              <thead>
+                <tr>
+                  <th>Algorithm</th>
+                  <th>Maze</th>
+                  <th>Grid</th>
+                  <th>Compute</th>
+                  <th>Visited</th>
+                  <th>Path</th>
+                  <th>Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runHistory.map((r) => (
+                  <tr key={r.id}>
+                    <td>{labelForAlgorithm(r.algorithm)}</td>
+                    <td>{labelForMaze(r.mazeType)}</td>
+                    <td>
+                      {r.rows}×{r.cols}
+                    </td>
+                    <td>{formatMs(r.computeMs)}</td>
+                    <td>{r.visitedCount}</td>
+                    <td>{r.pathLength}</td>
+                    <td>{r.result}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="pv-historyEmpty">Run “Benchmark All” to compare algorithm runtimes.</div>
+        )}
+      </section>
 
       <div className="pv-legend">
         <div className="pv-legend-item">
