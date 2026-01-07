@@ -104,11 +104,11 @@ export default function PathfindingVisualizer() {
 
   function clearVisualizationOnly() {
     clearAllTimeouts()
-    if (!hasVisualization) {
-      setStatus('Ready')
-      setIsAnimating(false)
-      return
-    }
+    // IMPORTANT:
+    // We mutate node classNames directly for animation performance. React will NOT
+    // necessarily restore classNames on re-render if the props are "unchanged"
+    // (because React diffs against its last render, not the live DOM).
+    // So clearing the visualization must always actively reset node classes.
     for (const row of grid) {
       for (const node of row) {
         const el = document.getElementById(`node-${node.row}-${node.col}`)
@@ -126,6 +126,9 @@ export default function PathfindingVisualizer() {
     clearAllTimeouts()
     setIsAnimating(false)
     setStatus('Stopped')
+    // We likely have partially-drawn visited/path classes on the DOM now.
+    // Mark as "visualized" so Clear Path will definitely reset the grid.
+    setHasVisualization(true)
   }
 
   function setGridNodeWall(row, col, isWall) {
@@ -302,6 +305,7 @@ export default function PathfindingVisualizer() {
     clearVisualizationOnly()
     setIsAnimating(true)
     setStatus(algorithm === 'bfs' ? 'Visualizing BFS...' : 'Visualizing Dijkstra...')
+    setHasVisualization(true)
 
     const gridForAlgo = cloneGridForAlgorithm(grid)
     const startNode = gridForAlgo[startPos.row][startPos.col]
@@ -384,11 +388,11 @@ export default function PathfindingVisualizer() {
           <button onClick={clearWalls} disabled={isAnimating}>
             Clear Walls
           </button>
-          <button onClick={resetBoard} disabled={isAnimating}>
-            Reset Board
-          </button>
           <button onClick={isAnimating ? stopAnimation : clearVisualizationOnly}>
             {isAnimating ? 'Stop' : 'Clear Path'}
+          </button>
+          <button onClick={resetBoard} disabled={isAnimating}>
+            Reset Board
           </button>
         </div>
       </header>
