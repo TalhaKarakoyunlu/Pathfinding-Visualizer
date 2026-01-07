@@ -598,7 +598,7 @@ export default function PathfindingVisualizer() {
             >
               <option value="backtracker">DFS Backtracker</option>
               <option value="division">Recursive Division</option>
-              <option value="prims">Randomized Prim's</option>
+              <option value="prims">Randomized Prim&apos;s</option>
             </select>
           </label>
 
