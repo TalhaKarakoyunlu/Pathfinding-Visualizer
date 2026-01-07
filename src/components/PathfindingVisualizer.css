@@ -1,0 +1,151 @@
+.pv {
+  min-height: 100vh;
+  padding: 24px;
+  color: #e2e8f0; /* slate-200 */
+  background: radial-gradient(1200px 600px at 20% 0%, #1e293b 0%, #0b1220 60%);
+}
+
+.pv-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.pv-title h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.pv-subtitle {
+  margin: 6px 0 0;
+  color: rgba(226, 232, 240, 0.75);
+  font-size: 14px;
+}
+
+.pv-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pv-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.pv-field--wide {
+  gap: 10px;
+}
+
+.pv-fieldLabel {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.pv-fieldValue {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.85);
+  min-width: 40px;
+  text-align: right;
+}
+
+.pv-field select {
+  color: #e2e8f0;
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.pv-field input[type='range'] {
+  width: 140px;
+}
+
+.pv-controls button {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(2, 6, 23, 0.6);
+  color: #e2e8f0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.pv-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pv-controls button:hover:not(:disabled) {
+  border-color: rgba(148, 163, 184, 0.6);
+}
+
+.pv-status {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.45);
+  font-size: 14px;
+}
+
+.pv-status-label {
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.pv-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.pv-legend-item {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.pv-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.pv-gridWrap {
+  width: 100%;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.pv-grid {
+  display: grid;
+  grid-auto-rows: 22px;
+  width: max-content;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  .pv {
+    padding: 16px;
+  }
+}
+
+

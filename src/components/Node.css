@@ -1,0 +1,33 @@
+.node {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0f172a; /* slate-900-ish */
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+
+.node:hover {
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.node-start {
+  background: #22c55e; /* green */
+}
+
+.node-finish {
+  background: #ef4444; /* red */
+}
+
+.node-wall {
+  background: #334155; /* slate */
+}
+
+.node-visited {
+  background: #3b82f6; /* blue */
+}
+
+.node-shortest-path {
+  background: #facc15; /* yellow */
+}
+
+
