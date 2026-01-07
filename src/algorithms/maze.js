@@ -24,6 +24,30 @@ function chooseOrientation(width, height) {
   return Math.random() < 0.5 ? 'horizontal' : 'vertical'
 }
 
+function ensureEndpointOpenings(walls, rows, cols, pos) {
+  // Maze generators often wall the border. If start/finish is on an edge/corner,
+  // it can become isolated. This guarantees a small "gate" into the maze.
+  const { row, col } = pos
+  const del = (r, c) => {
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return
+    walls.delete(key(r, c))
+  }
+
+  del(row, col)
+
+  // Open a cell inward from each border the endpoint touches.
+  if (row === 0) del(1, col)
+  if (row === rows - 1) del(rows - 2, col)
+  if (col === 0) del(row, 1)
+  if (col === cols - 1) del(row, cols - 2)
+
+  // Corners need an extra diagonal interior cell so the "gate" actually reaches the interior.
+  if (row === 0 && col === 0) del(1, 1)
+  if (row === 0 && col === cols - 1) del(1, cols - 2)
+  if (row === rows - 1 && col === 0) del(rows - 2, 1)
+  if (row === rows - 1 && col === cols - 1) del(rows - 2, cols - 2)
+}
+
 /**
  * Recursive Division Maze generator.
  *
@@ -100,6 +124,10 @@ export function generateRecursiveDivisionMaze({
 
   // Divide the interior region (excluding border).
   divide(1, rows - 2, 1, cols - 2, chooseOrientation(cols, rows))
+
+  // Ensure endpoints aren't isolated when placed on borders/corners.
+  ensureEndpointOpenings(walls, rows, cols, start)
+  ensureEndpointOpenings(walls, rows, cols, finish)
 
   return walls
 }
@@ -249,6 +277,10 @@ export function generateRecursiveBacktrackerMaze({ rows, cols, start, finish, ad
 
   carveLine(start, nearestOpen(start))
   carveLine(finish, nearestOpen(finish))
+
+  // Ensure endpoints aren't isolated when placed on borders/corners.
+  ensureEndpointOpenings(walls, rows, cols, start)
+  ensureEndpointOpenings(walls, rows, cols, finish)
 
   return walls
 }
